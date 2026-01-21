@@ -16,8 +16,8 @@ Acoustic-Anomaly-Detection-for-Machines/
 │   │           ├── abnormal3/
 │   │           └── normal/
 │   │
-│   ├── processed/
-│   └── features/
+│   ├── processed/       
+│   └── features/          
 │       └── mfcc/
 │           └── valve/
 │
@@ -42,9 +42,6 @@ Acoustic-Anomaly-Detection-for-Machines/
 ├── notebooks/
 │   └── exploration.ipynb
 │
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
-         
+├── .gitignore            
+├── requirements.txt        
+└── README.md            

@@ -1,5 +1,5 @@
-# data_loader.py
 import os
+
 
 def collect_files(machine_type, split, label, base_dir="data/raw"):
     """
@@ -7,7 +7,6 @@ def collect_files(machine_type, split, label, base_dir="data/raw"):
     """
     target_dir = os.path.join(base_dir, machine_type, split, label)
     files = []
-
     if not os.path.exists(target_dir):
         print(f"[WARN] Folder not found: {target_dir}")
         return files
@@ -18,8 +17,6 @@ def collect_files(machine_type, split, label, base_dir="data/raw"):
                 files.append(os.path.join(root, f))
 
     return sorted(files)
-
-
 def collect_all(machine_type, base_dir="data/raw"):
     return {
         "train_normal": collect_files(machine_type, "train", "normal", base_dir),
