@@ -1,7 +1,8 @@
+```
 Acoustic-Anomaly-Detection-for-Machines/
 │
 ├── data/
-│   ├── raw/                
+│   ├── raw/
 │   │   └── valve/
 │   │       ├── train/
 │   │       │   ├── normal/
@@ -15,21 +16,21 @@ Acoustic-Anomaly-Detection-for-Machines/
 │   │           ├── abnormal3/
 │   │           └── normal/
 │   │
-│   ├── processed/       
-│   └── features/          
+│   ├── processed/
+│   └── features/
 │       └── mfcc/
 │           └── valve/
 │
-├── results/            
+├── results/
 │   ├── mfcc_plots/
 │   │   └── valve/
 │   ├── audio_summary.csv
 │   └── metrics.csv
 │
-├── logs/               
+├── logs/
 │   └── data_check.log
 │
-├── src/                
+├── src/
 │   ├── check_data.py
 │   ├── extract_mfcc.py
 │   ├── prepare_dataset.py
@@ -38,9 +39,12 @@ Acoustic-Anomaly-Detection-for-Machines/
 │   ├── train_gmm.py
 │   └── utils.py
 │
-├── notebooks/         
+├── notebooks/
 │   └── exploration.ipynb
 │
-├── .gitignore            
-├── requirements.txt        
-└── README.md            
+├── .gitignore
+├── requirements.txt
+└── README.md
+```
+
+         
