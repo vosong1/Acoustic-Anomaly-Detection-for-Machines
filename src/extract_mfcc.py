@@ -12,12 +12,9 @@ from dsp.dsp_mfcc import compute_mfcc
 
 SR = 16000
 N_MFCC = 20
-MAX_PLOT = 50  # số file tối đa để vẽ ảnh mỗi group
+MAX_PLOT = 50  
 
 
-# =========================
-# Plot helpers
-# =========================
 def plot_waveform(y, sr, title, save_path):
     plt.figure(figsize=(10, 3))
     librosa.display.waveshow(y, sr=sr)
@@ -50,9 +47,6 @@ def plot_mfcc(mfcc, title, save_path):
     plt.close()
 
 
-# =========================
-# Feature helpers
-# =========================
 def mfcc_to_vector(mfcc):
     """
     mfcc shape: (T, N_MFCC)
@@ -76,7 +70,6 @@ def process_group(files, label, plot_dir, prefix):
             if mfcc.ndim != 2:
                 raise ValueError(f"MFCC shape invalid: {mfcc.shape}")
 
-            # đảm bảo mfcc = (T, N_MFCC)
             if mfcc.shape[1] != N_MFCC and mfcc.shape[0] == N_MFCC:
                 mfcc = mfcc.T
 
@@ -84,7 +77,6 @@ def process_group(files, label, plot_dir, prefix):
             X.append(vec)
             y.append(label)
 
-            # ====== SAVE PLOTS ======
             if i < MAX_PLOT:
                 base = f"{prefix}_{i:04d}"
 
@@ -124,10 +116,6 @@ def save_split(X, y, out_csv):
     df.to_csv(out_csv, index=False)
     print("Saved:", out_csv)
 
-
-# =========================
-# Main
-# =========================
 def main(machine_type):
     data = collect_all(machine_type)
 
