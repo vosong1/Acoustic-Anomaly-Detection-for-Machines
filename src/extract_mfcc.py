@@ -23,20 +23,6 @@ def plot_waveform(y, sr, title, save_path):
     plt.savefig(save_path)
     plt.close()
 
-
-def plot_spectrogram(y, sr, title, save_path):
-    S = np.abs(librosa.stft(y, n_fft=1024, hop_length=512))
-    S_db = librosa.amplitude_to_db(S, ref=np.max)
-
-    plt.figure(figsize=(10, 4))
-    librosa.display.specshow(S_db, sr=sr, x_axis="time", y_axis="hz")
-    plt.colorbar(format="%+2.0f dB")
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
-
-
 def plot_mfcc(mfcc, title, save_path):
     plt.figure(figsize=(10, 4))
     librosa.display.specshow(mfcc.T, x_axis="time")
