@@ -2,7 +2,9 @@ import numpy as np
 from scipy.fftpack import dct
 
 def frame_signal(y, frame_size, hop_size):
-    n_frames = 1 + int((len(y) - frame_size) / hop_size)
+    pad_len = (frame_size - len(y) % hop_size) % hop_size
+    y = np.pad(y, (0, pad_len))
+    n_frames = 1 + (len(y) - frame_size) // hop_size
     frames = np.zeros((n_frames, frame_size))
     for i in range(n_frames):
         start = i * hop_size
@@ -18,8 +20,10 @@ def magnitude_spectrum(frames, n_fft):
 
 
 def mel_filterbank(sr, n_fft, n_mels=20):
-    def hz_to_mel(hz): return 2595 * np.log10(1 + hz / 700)
-    def mel_to_hz(mel): return 700 * (10**(mel / 2595) - 1)
+    def hz_to_mel(hz):
+        return 2595 * np.log10(1 + hz / 700)
+    def mel_to_hz(mel):
+        return 700 * (10**(mel / 2595) - 1)
 
     mel_min = hz_to_mel(0)
     mel_max = hz_to_mel(sr / 2)
