@@ -72,12 +72,6 @@ def process_group(files, label, plot_dir, prefix):
                     os.path.join(plot_dir, f"{base}_waveform.png")
                 )
 
-                plot_spectrogram(
-                    audio, sr,
-                    f"{base} spectrogram",
-                    os.path.join(plot_dir, f"{base}_spectrogram.png")
-                )
-
                 plot_mfcc(
                     mfcc,
                     f"{base} MFCC",
@@ -119,7 +113,6 @@ def main(machine_type):
 
     scaler = StandardScaler()
 
-    # -------- TRAIN NORMAL --------
     X_train, y_train = process_group(
         data["train_normal"], 0,
         plot_dirs["train_normal"], "normal"
@@ -134,7 +127,6 @@ def main(machine_type):
     X_train = scaler.fit_transform(X_train)
     save_split(X_train, y_train, os.path.join(out_dir, "train_normal.csv"))
 
-    # -------- TEST NORMAL --------
     X_test_n, y_test_n = process_group(
         data["test_normal"], 0,
         plot_dirs["test_normal"], "normal"
@@ -148,7 +140,7 @@ def main(machine_type):
     else:
         print("[WARN] No test_normal data")
 
-    # -------- TEST ABNORMAL --------
+
     X_test_a, y_test_a = process_group(
         data["test_abnormal"], 1,
         plot_dirs["test_abnormal"], "abnormal"
