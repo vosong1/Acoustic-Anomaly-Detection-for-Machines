@@ -1,8 +1,8 @@
 import os
 import shutil
 
-BASE_DIR = r"D:\Acoustic-Anomaly-Detection-for-Machines\data\fan"
-OUTPUT_DIR = r"D:\Acoustic-Anomaly-Detection-for-Machines\abnormal"
+BASE_DIR = r"D:\Spring 2026\AIL303m\Acoustic-Anomaly-Detection-for-Machines\data\raw"
+OUTPUT_DIR = r"D:\Spring 2026\AIL303m\Acoustic-Anomaly-Detection-for-Machines\normal"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -13,7 +13,7 @@ for id_name in sorted(os.listdir(BASE_DIR)):
     if not os.path.isdir(id_path):
         continue
 
-    normal_path = os.path.join(id_path, "abnormal")
+    normal_path = os.path.join(id_path, "normal")
     if not os.path.exists(normal_path):
         print(f"⚠ Không có file trong {id_name}")
         continue
