@@ -1,37 +1,43 @@
 {
   "machine": "fan",
-  "feature_mfcc": "mfcc",
+
   "mfcc": {
     "sr": 16000,
-    "n_mfcc": 11,
+    "n_mfcc": 20,
     "frame_size": 1024,
     "hop_size": 512,
-    "n_fft": 1024,
-    "max_plot": 0,
-    "scale_in_extract": false
+    "n_fft": 2048
   },
-  "feature_handcrafted": "handcrafted",
+
   "handcrafted": {
-    "sr": 16000,
-    "frame_size": 400,
-    "hop_size": 160,
-    "n_fft": 512,
-    "roll_percent": 0.85,
-    "scale_in_extract": false
-  },
-  "feature_stft": "stft",
-  "stft": {
-    "sr": 16000,
+    "frame_size": 512,
+    "hop_size": 256,
     "n_fft": 1024,
-    "hop_length": 512,
-    "max_plot": 0,
+    "roll_percent": 0.85
+  },
+
+  "stft": {
+    "n_fft": 2048,
+    "hop_length": 512
+  },
+
+  "combo": {
+    "include_raw_max": true,
     "scale_in_extract": false
   },
+
   "svm": {
     "kernel": "rbf",
+    "nu": 0.05,
     "gamma": "scale",
-    "nu": 0.15,
-    "pca": 0.95,
+    "pca": 0.99,
     "scale": true
+  },
+  "logmel": {
+    "sr": 16000,
+    "n_fft": 1024,
+    "hop": 512,
+    "n_mels": 128
   }
+
 }

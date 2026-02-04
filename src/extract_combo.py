@@ -2,249 +2,252 @@
 # -*- coding: utf-8 -*-
 
 """
-Combo feature extractor: MFCC (mean/std) + handcrafted + optional raw_max.
+Combo Feature Extractor
+======================
 
-Supports:
-- Running as module: python -m src.extract_combo ...
-- Running as script: python src/extract_combo.py ...
+Extract feature vector gồm:
 
-Config:
-- CLI args override defaults
-- If --config is provided, values are loaded from JSON and applied (then CLI can still override if explicitly passed)
+    MFCC(mean,std) + Handcrafted + optional raw_max
 
-Outputs:
-features/{feature}/{machine}/
-  train_normal.csv
-  test_normal.csv
-  test_abnormal.csv
+Chạy được:
+
+    python -m src.extract_combo --config config.json
+    python -m src.extract_combo --machine fan
+
+Output:
+
+    features/{feature}/{machine}/
+        train_normal.csv
+        test_normal.csv
+        test_abnormal.csv
 """
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-# ---- Robust imports (works for both "python -m src.xxx" and "python src/xxx.py") ----
+
+# ✅ Import đúng project structure src/
 try:
     from src.load_data import collect_all
     from src.audio_utils import load_audio
     from src.dsp.dsp_mfcc import compute_mfcc
     from src.handcraft import extract_all_ml_features
-except Exception:
-    # Fallback for running when src is on PYTHONPATH or running inside src/
+except:
     from load_data import collect_all
     from audio_utils import load_audio
     from dsp.dsp_mfcc import compute_mfcc
     from handcraft import extract_all_ml_features
 
 
-def _read_json(path: str) -> dict:
+# ============================================================
+# ✅ Helper
+# ============================================================
+
+def read_json(path):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def _coalesce(*vals):
-    """Return the first value that is not None."""
-    for v in vals:
-        if v is not None:
-            return v
-    return None
-
-
-def compute_raw_max(filepath: str) -> float:
+def compute_raw_max(filepath):
     """
-    Compute raw max(abs(y)) BEFORE any normalization.
-    We intentionally bypass audio_utils.load_audio() because it normalizes audio.
+    raw_max lấy từ waveform gốc BEFORE normalize.
+    Vì load_audio() normalize max=1 nên phải đọc thẳng file wav.
     """
-    try:
-        import soundfile as sf
-        y, _sr = sf.read(filepath)
-        y = np.asarray(y, dtype=np.float32)
-        if y.ndim > 1:
-            y = np.mean(y, axis=1)  # stereo -> mono
-        return float(np.max(np.abs(y))) if y.size else 0.0
-    except Exception:
-        # If anything goes wrong, fall back to NaN (still keeps vector length consistent).
-        return float("nan")
+    import soundfile as sf
 
+    y, _ = sf.read(filepath)
+    y = np.asarray(y, dtype=np.float32)
+
+    if y.ndim > 1:
+        y = np.mean(y, axis=1)
+
+    return float(np.max(np.abs(y)))
+
+
+# ============================================================
+# ✅ Combo Feature Vector
+# ============================================================
 
 def get_combo_vector(
-    filepath: str,
-    sr: int,
-    n_mfcc: int,
-    frame_size: int,
-    hop_size: int,
-    n_fft: int,
-    roll_percent: float,
-    include_raw_max: bool,
-) -> np.ndarray:
-    # Load normalized audio for feature computation (as your pipeline does)
+    filepath,
+    sr,
+    n_mfcc,
+    frame_size,
+    hop_size,
+    n_fft,
+    roll_percent,
+    include_raw_max=True
+):
+    # Load normalized audio
     y, sr = load_audio(filepath, sr_target=sr)
 
-    # MFCC -> mean/std over time
+    # ---- MFCC ----
     mfcc = compute_mfcc(
         y,
         sr,
         n_mfcc=n_mfcc,
         frame_size=frame_size,
         hop_size=hop_size,
-        n_fft=n_fft,
+        n_fft=n_fft
     )
+
     mfcc_mean = np.mean(mfcc, axis=0)
     mfcc_std = np.std(mfcc, axis=0)
 
-    # Handcrafted
+    # ---- Handcrafted ----
     hc = extract_all_ml_features(
         y,
         sr,
         frame_size=frame_size,
         hop_size=hop_size,
         n_fft=n_fft,
-        roll_percent=roll_percent,
+        roll_percent=roll_percent
     )
 
     parts = [mfcc_mean, mfcc_std, hc]
 
-    # Optional raw_max (computed from raw waveform pre-normalization)
+    # ---- raw_max ----
     if include_raw_max:
         raw_max = compute_raw_max(filepath)
         parts.append(np.array([raw_max], dtype=np.float32))
 
-    return np.concatenate(parts, axis=0).astype(np.float32)
+    return np.concatenate(parts, axis=0)
 
+
+# ============================================================
+# ✅ Main
+# ============================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract combo features (MFCC+handcrafted+raw_max).")
+    parser = argparse.ArgumentParser("Extract Combo Features")
 
-    # Common
-    parser.add_argument("--machine", type=str, default=None, help="Machine type (e.g., fan, pump, slider, valve).")
-    parser.add_argument("--feature", type=str, default=None, help="Feature folder name under features/ (default: combo_final).")
-    parser.add_argument("--config", type=str, default=None, help="Path to JSON config file.")
+    parser.add_argument("--machine", type=str, default=None)
+    parser.add_argument("--feature", type=str, default="combo_final")
 
-    # Audio / MFCC params
-    parser.add_argument("--sr", type=int, default=None)
-    parser.add_argument("--n_mfcc", type=int, default=None)
-    parser.add_argument("--frame_size", type=int, default=None)
-    parser.add_argument("--hop_size", type=int, default=None)
-    parser.add_argument("--n_fft", type=int, default=None)
+    parser.add_argument("--config", type=str, default=None)
+
+    # MFCC params
+    parser.add_argument("--sr", type=int, default=16000)
+    parser.add_argument("--n_mfcc", type=int, default=20)
+    parser.add_argument("--frame_size", type=int, default=1024)
+    parser.add_argument("--hop_size", type=int, default=512)
+    parser.add_argument("--n_fft", type=int, default=2048)
 
     # Handcrafted params
-    parser.add_argument("--roll_percent", type=float, default=None)
+    parser.add_argument("--roll_percent", type=float, default=0.85)
 
     # Combo options
-    parser.add_argument("--include_raw_max", action="store_true", help="Append raw max(abs(y)) before normalization.")
-    parser.add_argument("--no_raw_max", action="store_true", help="Force disable raw_max even if config enables it.")
+    parser.add_argument("--no_raw_max", action="store_true")
 
-    # Scaling in extract
-    parser.add_argument("--scale_in_extract", action="store_true", help="Apply StandardScaler to extracted vectors before saving.")
+    # Scaling
+    parser.add_argument("--scale_in_extract", action="store_true")
 
     args = parser.parse_args()
 
-    # ---- Defaults ----
-    defaults = {
-        "feature": "combo_final",
-        "sr": 16000,
-        "n_mfcc": 13,
-        "frame_size": 1024,
-        "hop_size": 512,
-        "n_fft": 1024,
-        "roll_percent": 0.85,
-        "include_raw_max": True,  # your original code included it
-        "scale_in_extract": False,  # avoid double-scaling; prefer scaling in SVM
-    }
+    # ==================================================
+    # ✅ Load config.json nếu có
+    # ==================================================
 
-    cfg = {}
-    if args.config:
-        cfg = _read_json(args.config)
+    if args.config is not None:
+        cfg = read_json(args.config)
 
-    # Resolve machine (must exist)
-    machine = _coalesce(args.machine, cfg.get("machine"), cfg.get("machine_type"))
-    if not machine:
-        raise SystemExit("Missing --machine (or machine in config.json).")
+        args.machine = cfg.get("machine", args.machine)
 
-    # Resolve feature folder
-    feature = _coalesce(args.feature, cfg.get("feature_combo"), cfg.get("feature"), defaults["feature"])
+        mfcc_cfg = cfg.get("mfcc", {})
+        hc_cfg = cfg.get("handcrafted", {})
+        combo_cfg = cfg.get("combo", {})
 
-    # Pull MFCC params from config
-    mfcc_cfg = cfg.get("mfcc", {})
-    hc_cfg = cfg.get("handcrafted", {})
-    combo_cfg = cfg.get("combo", {})
+        args.sr = mfcc_cfg.get("sr", args.sr)
+        args.n_mfcc = mfcc_cfg.get("n_mfcc", args.n_mfcc)
+        args.frame_size = mfcc_cfg.get("frame_size", args.frame_size)
+        args.hop_size = mfcc_cfg.get("hop_size", args.hop_size)
+        args.n_fft = mfcc_cfg.get("n_fft", args.n_fft)
 
-    sr = int(_coalesce(args.sr, mfcc_cfg.get("sr"), hc_cfg.get("sr"), defaults["sr"]))
-    n_mfcc = int(_coalesce(args.n_mfcc, mfcc_cfg.get("n_mfcc"), defaults["n_mfcc"]))
-    frame_size = int(_coalesce(args.frame_size, mfcc_cfg.get("frame_size"), hc_cfg.get("frame_size"), defaults["frame_size"]))
-    hop_size = int(_coalesce(args.hop_size, mfcc_cfg.get("hop_size"), hc_cfg.get("hop_size"), defaults["hop_size"]))
-    n_fft = int(_coalesce(args.n_fft, mfcc_cfg.get("n_fft"), hc_cfg.get("n_fft"), defaults["n_fft"]))
-    roll_percent = float(_coalesce(args.roll_percent, hc_cfg.get("roll_percent"), defaults["roll_percent"]))
+        args.roll_percent = hc_cfg.get("roll_percent", args.roll_percent)
 
-    # include_raw_max: config can set combo.include_raw_max, CLI flags can override
-    include_raw_max = bool(_coalesce(
-        True if args.include_raw_max else None,
-        False if args.no_raw_max else None,
-        combo_cfg.get("include_raw_max"),
-        defaults["include_raw_max"],
-    ))
+        if combo_cfg.get("include_raw_max") is False:
+            args.no_raw_max = True
 
-    # scale_in_extract: config can set combo.scale_in_extract
-    scale_in_extract = bool(_coalesce(
-        True if args.scale_in_extract else None,
-        combo_cfg.get("scale_in_extract"),
-        defaults["scale_in_extract"],
-    ))
+    if args.machine is None:
+        raise ValueError("❌ Bạn phải truyền --machine hoặc machine trong config.json")
 
-    # ---- Load file lists ----
-    train_normal, test_normal, test_abnormal = collect_all(machine)
+    include_raw_max = not args.no_raw_max
 
-    # ---- Extract ----
-    def _extract(paths):
+    # ==================================================
+    # ✅ Load dataset file list
+    # collect_all() returns dict
+    # ==================================================
+
+    data = collect_all(args.machine)
+
+    train_files = data["train_normal"]
+    test_norm_files = data["test_normal"]
+    test_abn_files = data["test_abnormal"]
+
+    print("✅ Loaded file lists:")
+    print("   train:", len(train_files))
+    print("   test normal:", len(test_norm_files))
+    print("   test abnormal:", len(test_abn_files))
+
+    # ==================================================
+    # ✅ Extract function
+    # ==================================================
+
+    def extract(paths):
         feats = []
         for p in paths:
-            feats.append(
-                get_combo_vector(
-                    p,
-                    sr=sr,
-                    n_mfcc=n_mfcc,
-                    frame_size=frame_size,
-                    hop_size=hop_size,
-                    n_fft=n_fft,
-                    roll_percent=roll_percent,
-                    include_raw_max=include_raw_max,
-                )
+            vec = get_combo_vector(
+                p,
+                sr=args.sr,
+                n_mfcc=args.n_mfcc,
+                frame_size=args.frame_size,
+                hop_size=args.hop_size,
+                n_fft=args.n_fft,
+                roll_percent=args.roll_percent,
+                include_raw_max=include_raw_max
             )
-        return np.vstack(feats) if feats else np.zeros((0, 0), dtype=np.float32)
+            feats.append(vec)
 
-    train_feat = _extract(train_normal)
-    test_norm_feat = _extract(test_normal)
-    test_abn_feat = _extract(test_abnormal)
+        return np.vstack(feats)
 
-    # ---- Optional scaling (NOT recommended if you also scale in SVM) ----
-    if scale_in_extract and train_feat.size:
+    train_feat = extract(train_files)
+    test_norm_feat = extract(test_norm_files)
+    test_abn_feat = extract(test_abn_files)
+
+    # ==================================================
+    # ✅ Optional scaling
+    # ==================================================
+
+    if args.scale_in_extract:
         scaler = StandardScaler()
         train_feat = scaler.fit_transform(train_feat)
-        test_norm_feat = scaler.transform(test_norm_feat) if test_norm_feat.size else test_norm_feat
-        test_abn_feat = scaler.transform(test_abn_feat) if test_abn_feat.size else test_abn_feat
+        test_norm_feat = scaler.transform(test_norm_feat)
+        test_abn_feat = scaler.transform(test_abn_feat)
 
-    # ---- Save ----
-    out_dir = Path("features") / feature / machine
+    # ==================================================
+    # ✅ Save CSV
+    # ==================================================
+
+    out_dir = Path("features") / args.feature / args.machine
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pd.DataFrame(train_feat).to_csv(out_dir / "train_normal.csv", index=False)
     pd.DataFrame(test_norm_feat).to_csv(out_dir / "test_normal.csv", index=False)
     pd.DataFrame(test_abn_feat).to_csv(out_dir / "test_abnormal.csv", index=False)
 
-    print(f"[OK] Saved combo features to: {out_dir}")
-    print(f"  train_normal:  {train_feat.shape}")
-    print(f"  test_normal:   {test_norm_feat.shape}")
-    print(f"  test_abnormal: {test_abn_feat.shape}")
-    print(f"  include_raw_max={include_raw_max} (raw_max computed pre-normalization)")
-    print(f"  mfcc: sr={sr}, n_mfcc={n_mfcc}, frame={frame_size}, hop={hop_size}, n_fft={n_fft}")
-    print(f"  handcrafted: roll_percent={roll_percent}")
-    print(f"  scale_in_extract={scale_in_extract}")
+    print("\n✅ DONE! Saved combo features:")
+    print(" Folder:", out_dir)
+    print(" Shape train:", train_feat.shape)
+    print(" Shape test normal:", test_norm_feat.shape)
+    print(" Shape test abnormal:", test_abn_feat.shape)
+    print(" include_raw_max =", include_raw_max)
 
 
+# ============================================================
 if __name__ == "__main__":
     main()
