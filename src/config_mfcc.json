@@ -1,0 +1,32 @@
+{
+  "machine": "fan",
+
+  "mfcc": {
+    "sr": 16000,
+    "n_mfcc": 13,
+    "frame_size": 1024,
+    "hop_size": 512,
+    "n_fft": 2048
+  },
+
+  "handcrafted": {
+    "sr": 16000,
+    "frame_size": 400,
+    "hop_size": 160,
+    "n_fft": 512,
+    "roll_percent": 0.85
+  },
+
+  "stft": {
+    "sr": 16000,
+    "n_fft": 1024,
+    "hop_length": 512
+  },
+
+  "svm": {
+    "nu": 0.1,
+    "gamma": "scale",
+    "pca": 0.95,
+    "scale": true
+  }
+}

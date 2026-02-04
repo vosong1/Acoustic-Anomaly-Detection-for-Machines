@@ -5,10 +5,9 @@ def frame_signal(y, frame_size, hop_size):
     frames = np.zeros((n_frames, frame_size))
     for i in range(n_frames):
         frames[i] = y[i * hop_size : i * hop_size + frame_size]
-
+    
     frames *= np.hamming(frame_size)
     return frames
-
 def magnitude_spectrum(frames, n_fft):
     mag_spec = np.abs(np.fft.rfft(frames, n=n_fft))
     power_spec = mag_spec**2
@@ -38,35 +37,23 @@ def compute_spectral_flatness(power_spec):
     ps = power_spec + 1e-10
     geometric_mean = np.exp(np.mean(np.log(ps), axis=1))
     arithmetic_mean = np.mean(ps, axis=1)
-
+    
     flatness = geometric_mean / arithmetic_mean
     return flatness
 
-def extract_all_ml_features(
-    y,
-    sr,
-    frame_size=400,
-    hop_size=160,
-    n_fft=512,
-    roll_percent=0.85,
-):
-    """
-    Trích xuất handcrafted features:
-    - RMS, ZCR, spectral centroid, spectral rolloff, spectral flatness
-    Mỗi đặc trưng -> [mean, std] => tổng 10 chiều.
-    """
+def extract_all_ml_features(y, sr, frame_size=400, hop_size=160, n_fft=512, roll_percent=0.85):
     frames = frame_signal(y, frame_size, hop_size)
     power_spec = magnitude_spectrum(frames, n_fft)
-
+    
     rms = compute_rms(frames)
     zcr = compute_zcr(frames)
     centroid = compute_spectral_centroid(power_spec, sr, n_fft)
     rolloff = compute_spectral_rolloff(power_spec, sr, n_fft, roll_percent=roll_percent)
     flatness = compute_spectral_flatness(power_spec)
-
+    
     features = []
     for feat in [rms, zcr, centroid, rolloff, flatness]:
         features.append(np.mean(feat))
         features.append(np.std(feat))
-
+        
     return np.array(features)
