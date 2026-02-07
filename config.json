@@ -1,12 +1,21 @@
 {
   "machine": "fan",
 
+  "features": [
+    "mfcc",
+    "handcrafted",
+    "logmel",
+    "combo_final",
+    "log_mel",
+    "paper_style"
+  ],
+
   "mfcc": {
     "sr": 16000,
-    "n_mfcc": 20,
+    "n_mfcc": 12,
     "frame_size": 1024,
     "hop_size": 512,
-    "n_fft": 2048
+    "n_fft": 1024
   },
 
   "handcrafted": {
@@ -17,7 +26,7 @@
   },
 
   "stft": {
-    "n_fft": 2048,
+    "n_fft": 1024,
     "hop_length": 512
   },
 
@@ -28,16 +37,38 @@
 
   "svm": {
     "kernel": "rbf",
-    "nu": 0.05,
+    "nu": 0.15,
+
     "gamma": "scale",
+    "gamma_list": [
+      "scale",
+      0.001,
+      0.005,
+      0.01,
+      0.05,
+      0.1
+    ],
+
     "pca": 0.99,
     "scale": true
   },
+
+  "metrics": {
+    "threshold_mode": "nu"
+  },
+
   "logmel": {
     "sr": 16000,
     "n_fft": 1024,
     "hop": 512,
-    "n_mels": 128
-  }
+    "n_mels": 64,
+    "stack": 5
+  },
 
+  "ae": {
+    "bottleneck": 64,
+    "epochs": 100,
+    "batch": 256,
+    "lr": 1e-4
+  }
 }

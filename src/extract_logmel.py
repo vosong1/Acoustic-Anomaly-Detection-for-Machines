@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Paper-style Feature Extractor
@@ -39,26 +37,24 @@ except:
     from audio_utils import load_audio
 
 
-# ======================================================
-# ✅ Log-Mel computation
-# ======================================================
+
+# Log-Mel computation
+
 
 def compute_logmel(y, sr, n_fft=1024, hop=512, n_mels=128):
 
     import librosa
 
-    # STFT power spectrogram
     S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop))**2
 
-    # Mel filterbank
+
     mel = librosa.feature.melspectrogram(
         S=S, sr=sr, n_mels=n_mels
     )
 
-    # Log compression
     logmel = librosa.power_to_db(mel)
 
-    return logmel.T   # shape: (frames, n_mels)
+    return logmel.T  
 
 
 def extract_logmel_vector(filepath, sr, n_fft, hop, n_mels):
@@ -76,10 +72,8 @@ def extract_logmel_vector(filepath, sr, n_fft, hop, n_mels):
 
     return np.concatenate([mean_vec, std_vec])
 
+#  Main
 
-# ======================================================
-# ✅ Main
-# ======================================================
 
 def main():
     parser = argparse.ArgumentParser()
