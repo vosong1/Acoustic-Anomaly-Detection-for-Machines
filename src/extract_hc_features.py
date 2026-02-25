@@ -1,154 +1,93 @@
+# src/extract_hc.py
+from __future__ import annotations
+
 import argparse
-import os
-import json
+from pathlib import Path
+from typing import List
+
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+import librosa
 
-try:
-    from src.load_data import collect_all
-    from src.audio_utils import load_audio
-    from src.handcraft import extract_all_ml_features
-except Exception:
-    from load_data import collect_all
-    from audio_utils import load_audio
-    from handcraft import extract_all_ml_features
+from load_data import make_split, DEFAULT_SNR_LIST
 
-FEATURE_NAMES = [
-    "rms_mean", "rms_std",
-    "zcr_mean", "zcr_std",
-    "centroid_mean", "centroid_std",
-    "rolloff_mean", "rolloff_std",
-    "flatness_mean", "flatness_std"
-]
 
-def process_group(files, label, sr, frame_size, hop_size, n_fft, roll_percent, show_example=False):
-    X, y = [], []
-    for i, f in enumerate(files):
-        try:
-            audio, _sr = load_audio(f, sr)
-            vec = extract_all_ml_features(
-                audio, _sr,
-                frame_size=frame_size,
-                hop_size=hop_size,
-                n_fft=n_fft,
-                roll_percent=roll_percent
-            )
+def extract_hc_vector(
+    wav_path: Path,
+    sr: int = 16000,
+    n_fft: int = 1024,
+    hop_length: int = 512,
+) -> np.ndarray:
 
-            X.append(vec)
-            y.append(label)
+    y, _ = librosa.load(str(wav_path), sr=sr, mono=True)
 
-            if show_example and i == 0:
-                print(f"\nĐặc trưng mẫu của file đầu tiên:")
-                for name, value in zip(FEATURE_NAMES, vec):
-                    print(f"  {name}: {value:.4f}")
+    rms = librosa.feature.rms(y=y, frame_length=n_fft, hop_length=hop_length)
+    zcr = librosa.feature.zero_crossing_rate(y, hop_length=hop_length)
+    centroid = librosa.feature.spectral_centroid(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length)
+    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length)
 
-        except Exception as e:
-            print(f"[ERROR] {f}: {e}")
+    feats = [rms, zcr, centroid, bandwidth]
 
-    return np.array(X), np.array(y)
+    feature_vec = []
+    for f in feats:
+        feature_vec.extend([f.mean(), f.std()])
 
-def save_split(X, y, out_csv):
-    cols = FEATURE_NAMES + ["label"]
-    data = np.column_stack([X, y])
-    df = pd.DataFrame(data, columns=cols)
-    df.to_csv(out_csv, index=False)
-    print("Saved:", out_csv)
+    return np.array(feature_vec, dtype=np.float32)
 
-def apply_config(args):
-    if not args.config:
-        return args
-    with open(args.config, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
 
-    args.machine = cfg.get("machine", args.machine)
-    args.feature = cfg.get("feature_handcrafted", args.feature)
+def build_df(file_list: List[Path], **kwargs) -> pd.DataFrame:
+    rows = []
+    for p in file_list:
+        feat = extract_hc_vector(p, **kwargs)
+        row = {"path": str(p)}
+        for i, v in enumerate(feat.tolist()):
+            row[f"f{i}"] = v
+        rows.append(row)
+    return pd.DataFrame(rows)
 
-    hc_cfg = cfg.get("handcrafted", {}) if isinstance(cfg.get("handcrafted", {}), dict) else {}
-    args.sr = hc_cfg.get("sr", args.sr)
-    args.frame_size = hc_cfg.get("frame_size", args.frame_size)
-    args.hop_size = hc_cfg.get("hop_size", args.hop_size)
-    args.n_fft = hc_cfg.get("n_fft", args.n_fft)
-    args.roll_percent = hc_cfg.get("roll_percent", args.roll_percent)
 
-    if "scale_in_extract" in hc_cfg:
-        args.scale_in_extract = bool(hc_cfg["scale_in_extract"])
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data_root", default="data/raw")
+    ap.add_argument("--machine", default="fan")
+    ap.add_argument("--out_root", default="extract/features/hc")
+    ap.add_argument("--sr", type=int, default=16000)
+    ap.add_argument("--n_fft", type=int, default=1024)
+    ap.add_argument("--hop_length", type=int, default=512)
+    ap.add_argument("--train_snr", nargs="*", default=None)
+    ap.add_argument("--test_snr", nargs="*", default=None)
+    ap.add_argument("--train_ratio", type=float, default=0.8)
+    ap.add_argument("--seed", type=int, default=42)
 
-    return args
+    args = ap.parse_args()
 
-def main(args):
-    args = apply_config(args)
+    train_snr = args.train_snr if args.train_snr is not None else DEFAULT_SNR_LIST
+    test_snr = args.test_snr if args.test_snr is not None else DEFAULT_SNR_LIST
 
-    data = collect_all(args.machine)
-
-    out_dir = os.path.join("features", args.feature, args.machine)
-    os.makedirs(out_dir, exist_ok=True)
-
-    scaler = StandardScaler()
-
-    X_train, y_train = process_group(
-        data["train_normal"], 0,
-        sr=args.sr,
-        frame_size=args.frame_size,
-        hop_size=args.hop_size,
-        n_fft=args.n_fft,
-        roll_percent=args.roll_percent,
-        show_example=True
+    split = make_split(
+        data_root=args.data_root,
+        machine=args.machine,
+        train_snr=train_snr,
+        test_snr=test_snr,
+        train_ratio=args.train_ratio,
+        seed=args.seed,
     )
-    print(f"X_train shape: {X_train.shape}")
 
-    if len(X_train) == 0:
-        print("[WARN] No training data found.")
-        return
+    out_dir = Path(args.out_root) / args.machine
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.scale_in_extract:
-        X_train = scaler.fit_transform(X_train)
-    save_split(X_train, y_train, os.path.join(out_dir, "train_normal.csv"))
+    kwargs = dict(sr=args.sr, n_fft=args.n_fft, hop_length=args.hop_length)
 
-    X_test_n, y_test_n = process_group(
-        data["test_normal"], 0,
-        sr=args.sr,
-        frame_size=args.frame_size,
-        hop_size=args.hop_size,
-        n_fft=args.n_fft,
-        roll_percent=args.roll_percent
-    )
-    if len(X_test_n) > 0:
-        if args.scale_in_extract:
-            X_test_n = scaler.transform(X_test_n)
-        save_split(X_test_n, y_test_n, os.path.join(out_dir, "test_normal.csv"))
-    else:
-        print("[WARN] No test_normal data")
+    df_train = build_df(split.train_normal, **kwargs)
+    df_test_n = build_df(split.test_normal, **kwargs)
+    df_test_a = build_df(split.test_abnormal, **kwargs)
 
-    X_test_a, y_test_a = process_group(
-        data["test_abnormal"], 1,
-        sr=args.sr,
-        frame_size=args.frame_size,
-        hop_size=args.hop_size,
-        n_fft=args.n_fft,
-        roll_percent=args.roll_percent
-    )
-    if len(X_test_a) > 0:
-        if args.scale_in_extract:
-            X_test_a = scaler.transform(X_test_a)
-        save_split(X_test_a, y_test_a, os.path.join(out_dir, "test_abnormal.csv"))
-    else:
-        print("[WARN] No test_abnormal data")
+    df_train.to_csv(out_dir / "train_normal.csv", index=False)
+    df_test_n.to_csv(out_dir / "test_normal.csv", index=False)
+    df_test_a.to_csv(out_dir / "test_abnormal.csv", index=False)
 
-    print(f"Done handcrafted for: {args.machine} | feature={args.feature}")
+    print("✅ Saved HC CSV to:", out_dir)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default=None, help="Đường dẫn file JSON config")
-    parser.add_argument("--machine", type=str, default="fan")
-    parser.add_argument("--feature", type=str, default="handcrafted",
-                        help="Tên folder feature (ví dụ: handcrafted_fs400_h160_fft512_r0.85)")
-    parser.add_argument("--sr", type=int, default=16000)
-    parser.add_argument("--frame_size", type=int, default=400)
-    parser.add_argument("--hop_size", type=int, default=160)
-    parser.add_argument("--n_fft", type=int, default=512)
-    parser.add_argument("--roll_percent", type=float, default=0.85)
-    parser.add_argument("--scale_in_extract", action="store_true",
-                        help="Nếu bật, sẽ StandardScaler ngay ở bước extract (mặc định: tắt).")
-    args = parser.parse_args()
-    main(args)
+    main()

@@ -1,203 +1,103 @@
+# src/extract_mfcc.py
+from __future__ import annotations
+
 import argparse
-import os
-import json
+from pathlib import Path
+from typing import List, Tuple
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import librosa.display
-from sklearn.preprocessing import StandardScaler
+import librosa
 
-# Robust imports: chạy được cả "python -m src.extract_mfcc" lẫn "python src/extract_mfcc.py"
-try:
-    from src.load_data import collect_all
-    from src.audio_utils import load_audio  # cần có trong project của bạn
-    from src.dsp.dsp_mfcc import compute_mfcc
-except Exception:
-    from load_data import collect_all
-    from audio_utils import load_audio
-    from dsp.dsp_mfcc import compute_mfcc
+from load_data import make_split, DEFAULT_SNR_LIST
 
-def plot_waveform(y, sr, title, save_path):
-    plt.figure(figsize=(10, 3))
-    librosa.display.waveshow(y, sr=sr)
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
 
-def plot_mfcc(mfcc, title, save_path):
-    plt.figure(figsize=(10, 4))
-    librosa.display.specshow(mfcc.T, x_axis="time")
-    plt.colorbar()
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
+def extract_mfcc_vector(
+    wav_path: Path,
+    sr: int = 16000,
+    n_mfcc: int = 20,
+    n_fft: int = 1024,
+    hop_length: int = 512,
+) -> np.ndarray:
+    """
+    Trả về 1 vector MFCC (mean + std theo thời gian) => size = 2*n_mfcc
+    """
+    y, _sr = librosa.load(str(wav_path), sr=sr, mono=True)
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
+    # mfcc shape: (n_mfcc, T)
+    mean = mfcc.mean(axis=1)
+    std = mfcc.std(axis=1)
+    feat = np.concatenate([mean, std], axis=0)
+    return feat.astype(np.float32)
 
-def mfcc_to_vector(mfcc: np.ndarray) -> np.ndarray:
-    """mfcc shape: (T, n_mfcc) -> vector: [mean(n_mfcc), std(n_mfcc)]"""
-    mean = mfcc.mean(axis=0)
-    std = mfcc.std(axis=0)
-    return np.concatenate([mean, std])
 
-def process_group(files, label, plot_dir, prefix, sr, n_mfcc, frame_size, hop_size, n_fft, max_plot):
-    X, y = [], []
-    os.makedirs(plot_dir, exist_ok=True)
+def build_df(file_list: List[Path], **mfcc_kwargs) -> pd.DataFrame:
+    rows = []
+    for p in file_list:
+        feat = extract_mfcc_vector(p, **mfcc_kwargs)
+        row = {"path": str(p)}
+        # f0..f(2*n_mfcc-1)
+        for i, v in enumerate(feat.tolist()):
+            row[f"f{i}"] = v
+        rows.append(row)
+    return pd.DataFrame(rows)
 
-    for i, f in enumerate(files):
-        try:
-            audio, _sr = load_audio(f, sr)
 
-            mfcc = compute_mfcc(
-                audio,
-                _sr,
-                n_mfcc=n_mfcc,
-                frame_size=frame_size,
-                hop_size=hop_size,
-                n_fft=n_fft,
-            )
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data_root", default="data/raw", help="vd: data/raw")
+    ap.add_argument("--machine", default="fan", help="fan/valve/...")
+    ap.add_argument("--out_root", default="extract/features/mfcc", help="vd: extract/features/mfcc")
+    ap.add_argument("--sr", type=int, default=16000)
+    ap.add_argument("--n_mfcc", type=int, default=20)
+    ap.add_argument("--n_fft", type=int, default=1024)
+    ap.add_argument("--hop_length", type=int, default=512)
 
-            if mfcc.ndim != 2:
-                raise ValueError(f"MFCC shape invalid: {mfcc.shape}")
+    # chọn SNR
+    ap.add_argument("--train_snr", nargs="*", default=None, help='vd: 6db 0db (mặc định: "-6db 0db 6db")')
+    ap.add_argument("--test_snr", nargs="*", default=None, help='vd: -6db (mặc định: "-6db 0db 6db")')
 
-            # đảm bảo mfcc có shape (T, n_mfcc)
-            if mfcc.shape[1] != n_mfcc and mfcc.shape[0] == n_mfcc:
-                mfcc = mfcc.T
+    ap.add_argument("--train_ratio", type=float, default=0.8)
+    ap.add_argument("--seed", type=int, default=42)
 
-            vec = mfcc_to_vector(mfcc)
-            X.append(vec)
-            y.append(label)
+    args = ap.parse_args()
 
-            if i < max_plot:
-                base = f"{prefix}_{i:04d}"
-                plot_waveform(audio, _sr, f"{base} waveform", os.path.join(plot_dir, f"{base}_waveform.png"))
-                plot_mfcc(mfcc, f"{base} MFCC", os.path.join(plot_dir, f"{base}_mfcc.png"))
+    data_root = Path(args.data_root)
+    out_dir = Path(args.out_root) / args.machine
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-        except Exception as e:
-            print("[ERROR]", f, e)
+    train_snr = args.train_snr if args.train_snr is not None else DEFAULT_SNR_LIST
+    test_snr = args.test_snr if args.test_snr is not None else DEFAULT_SNR_LIST
 
-    return np.array(X), np.array(y)
-
-def save_split(X, y, out_csv, n_mfcc):
-    cols = (
-        [f"mfcc_mean_{i}" for i in range(n_mfcc)] +
-        [f"mfcc_std_{i}" for i in range(n_mfcc)] +
-        ["label"]
+    split = make_split(
+        data_root=data_root,
+        machine=args.machine,
+        train_snr=train_snr,
+        test_snr=test_snr,
+        train_ratio=args.train_ratio,
+        seed=args.seed,
     )
 
-    data = np.column_stack([X, y])
-    df = pd.DataFrame(data, columns=cols)
-    df.to_csv(out_csv, index=False)
-    print("Saved:", out_csv)
+    mfcc_kwargs = dict(sr=args.sr, n_mfcc=args.n_mfcc, n_fft=args.n_fft, hop_length=args.hop_length)
 
-def apply_config(args):
-    """Override argparse args bằng JSON config (nếu có)."""
-    if not args.config:
-        return args
+    print(f"[INFO] train_normal: {len(split.train_normal)} files")
+    print(f"[INFO] test_normal: {len(split.test_normal)} files")
+    print(f"[INFO] test_abnormal: {len(split.test_abnormal)} files")
+    print(f"[INFO] train_snr={train_snr} | test_snr={test_snr}")
 
-    with open(args.config, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+    df_train = build_df(split.train_normal, **mfcc_kwargs)
+    df_test_n = build_df(split.test_normal, **mfcc_kwargs)
+    df_test_a = build_df(split.test_abnormal, **mfcc_kwargs)
 
-    args.machine = cfg.get("machine", args.machine)
-    args.feature = cfg.get("feature_mfcc", args.feature)  # optional shortcut
+    df_train.to_csv(out_dir / "train_normal.csv", index=False)
+    df_test_n.to_csv(out_dir / "test_normal.csv", index=False)
+    df_test_a.to_csv(out_dir / "test_abnormal.csv", index=False)
 
-    mfcc_cfg = cfg.get("mfcc", {}) if isinstance(cfg.get("mfcc", {}), dict) else {}
-    args.sr = mfcc_cfg.get("sr", args.sr)
-    args.n_mfcc = mfcc_cfg.get("n_mfcc", args.n_mfcc)
-    args.frame_size = mfcc_cfg.get("frame_size", args.frame_size)
-    args.hop_size = mfcc_cfg.get("hop_size", args.hop_size)
-    args.n_fft = mfcc_cfg.get("n_fft", args.n_fft)
-    args.max_plot = mfcc_cfg.get("max_plot", args.max_plot)
+    print(f"✅ Saved:")
+    print(f" - {out_dir / 'train_normal.csv'}")
+    print(f" - {out_dir / 'test_normal.csv'}")
+    print(f" - {out_dir / 'test_abnormal.csv'}")
 
-    # Cho phép bật/tắt scale trong extract từ config
-    if "scale_in_extract" in mfcc_cfg:
-        args.scale_in_extract = bool(mfcc_cfg["scale_in_extract"])
-
-    return args
-
-def main(args):
-    args = apply_config(args)
-
-    data = collect_all(args.machine)
-
-    out_dir = os.path.join("features", args.feature, args.machine)
-    plot_base = os.path.join("results", args.feature, args.machine)
-
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(plot_base, exist_ok=True)
-
-    plot_dirs = {
-        "train_normal": os.path.join(plot_base, "train_normal"),
-        "test_normal": os.path.join(plot_base, "test_normal"),
-        "test_abnormal": os.path.join(plot_base, "test_abnormal"),
-    }
-
-    scaler = StandardScaler()
-
-    X_train, y_train = process_group(
-        data["train_normal"], 0,
-        plot_dirs["train_normal"], "normal",
-        sr=args.sr, n_mfcc=args.n_mfcc,
-        frame_size=args.frame_size, hop_size=args.hop_size, n_fft=args.n_fft,
-        max_plot=args.max_plot
-    )
-    print("X_train shape:", X_train.shape)
-
-    if len(X_train) == 0:
-        print("[WARN] No train_normal data")
-        return
-
-    if args.scale_in_extract:
-        X_train = scaler.fit_transform(X_train)
-    save_split(X_train, y_train, os.path.join(out_dir, "train_normal.csv"), args.n_mfcc)
-
-    X_test_n, y_test_n = process_group(
-        data["test_normal"], 0,
-        plot_dirs["test_normal"], "normal",
-        sr=args.sr, n_mfcc=args.n_mfcc,
-        frame_size=args.frame_size, hop_size=args.hop_size, n_fft=args.n_fft,
-        max_plot=args.max_plot
-    )
-    print("X_test_normal shape:", X_test_n.shape)
-
-    if len(X_test_n) > 0:
-        if args.scale_in_extract:
-            X_test_n = scaler.transform(X_test_n)
-        save_split(X_test_n, y_test_n, os.path.join(out_dir, "test_normal.csv"), args.n_mfcc)
-    else:
-        print("[WARN] No test_normal data")
-
-    X_test_a, y_test_a = process_group(
-        data["test_abnormal"], 1,
-        plot_dirs["test_abnormal"], "abnormal",
-        sr=args.sr, n_mfcc=args.n_mfcc,
-        frame_size=args.frame_size, hop_size=args.hop_size, n_fft=args.n_fft,
-        max_plot=args.max_plot
-    )
-    print("X_test_abnormal shape:", X_test_a.shape)
-
-    if len(X_test_a) > 0:
-        if args.scale_in_extract:
-            X_test_a = scaler.transform(X_test_a)
-        save_split(X_test_a, y_test_a, os.path.join(out_dir, "test_abnormal.csv"), args.n_mfcc)
-    else:
-        print("[WARN] No test_abnormal data")
-
-    print(f"Done MFCC for: {args.machine} | feature={args.feature}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default=None, help="Đường dẫn file JSON config")
-    parser.add_argument("--machine", type=str, default="fan")
-    parser.add_argument("--feature", type=str, default="mfcc",
-                        help="Tên folder feature (ví dụ: mfcc_n11_fs1024_h512_fft1024)")
-    parser.add_argument("--sr", type=int, default=16000)
-    parser.add_argument("--n_mfcc", type=int, default=11)
-    parser.add_argument("--frame_size", type=int, default=1024)
-    parser.add_argument("--hop_size", type=int, default=512)
-    parser.add_argument("--n_fft", type=int, default=1024)
-    parser.add_argument("--max_plot", type=int, default=0)
-    parser.add_argument("--scale_in_extract", action="store_true",
-                        help="Nếu bật, sẽ StandardScaler ngay ở bước extract (mặc định: tắt).")
-    args = parser.parse_args()
-    main(args)
+    main()

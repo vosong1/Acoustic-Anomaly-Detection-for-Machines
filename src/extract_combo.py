@@ -1,25 +1,14 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Combo Feature Extractor
 ======================
-
 Extract feature vector gồm:
-
     MFCC(mean,std) + Handcrafted + optional raw_max
 
 Chạy được:
 
     python -m src.extract_combo --config config.json
     python -m src.extract_combo --machine fan
-
-Output:
-
-    features/{feature}/{machine}/
-        train_normal.csv
-        test_normal.csv
-        test_abnormal.csv
 """
 
 import argparse
@@ -30,8 +19,6 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-
-# ✅ Import đúng project structure src/
 try:
     from src.load_data import collect_all
     from src.audio_utils import load_audio
@@ -44,9 +31,7 @@ except:
     from handcraft import extract_all_ml_features
 
 
-# ============================================================
-# ✅ Helper
-# ============================================================
+
 
 def read_json(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -69,9 +54,9 @@ def compute_raw_max(filepath):
     return float(np.max(np.abs(y)))
 
 
-# ============================================================
-# ✅ Combo Feature Vector
-# ============================================================
+
+# Combo Feature Vector
+
 
 def get_combo_vector(
     filepath,
@@ -119,9 +104,9 @@ def get_combo_vector(
     return np.concatenate(parts, axis=0)
 
 
-# ============================================================
-# ✅ Main
-# ============================================================
+
+#  Main
+
 
 def main():
     parser = argparse.ArgumentParser("Extract Combo Features")
@@ -149,9 +134,9 @@ def main():
 
     args = parser.parse_args()
 
-    # ==================================================
+
     # ✅ Load config.json nếu có
-    # ==================================================
+
 
     if args.config is not None:
         cfg = read_json(args.config)
@@ -178,10 +163,10 @@ def main():
 
     include_raw_max = not args.no_raw_max
 
-    # ==================================================
-    # ✅ Load dataset file list
+
+    #  Load dataset file list
     # collect_all() returns dict
-    # ==================================================
+
 
     data = collect_all(args.machine)
 
@@ -194,9 +179,9 @@ def main():
     print("   test normal:", len(test_norm_files))
     print("   test abnormal:", len(test_abn_files))
 
-    # ==================================================
-    # ✅ Extract function
-    # ==================================================
+
+    # Extract function
+
 
     def extract(paths):
         feats = []
@@ -219,9 +204,8 @@ def main():
     test_norm_feat = extract(test_norm_files)
     test_abn_feat = extract(test_abn_files)
 
-    # ==================================================
-    # ✅ Optional scaling
-    # ==================================================
+    # Optional scaling
+
 
     if args.scale_in_extract:
         scaler = StandardScaler()
@@ -229,9 +213,6 @@ def main():
         test_norm_feat = scaler.transform(test_norm_feat)
         test_abn_feat = scaler.transform(test_abn_feat)
 
-    # ==================================================
-    # ✅ Save CSV
-    # ==================================================
 
     out_dir = Path("features") / args.feature / args.machine
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -248,6 +229,5 @@ def main():
     print(" include_raw_max =", include_raw_max)
 
 
-# ============================================================
 if __name__ == "__main__":
     main()
