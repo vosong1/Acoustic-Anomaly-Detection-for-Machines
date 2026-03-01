@@ -1,76 +1,119 @@
 # src/extract_mfcc.py
-from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
-from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
 import librosa
 
-from load_data import make_split, DEFAULT_SNR_LIST
+from .load_data import make_split, DEFAULT_SNR_LIST
 
 
+# =========================
+# Feature extraction
+# =========================
 def extract_mfcc_vector(
     wav_path: Path,
-    sr: int = 16000,
-    n_mfcc: int = 20,
-    n_fft: int = 1024,
-    hop_length: int = 512,
-) -> np.ndarray:
-    """
-    Trả về 1 vector MFCC (mean + std theo thời gian) => size = 2*n_mfcc
-    """
-    y, _sr = librosa.load(str(wav_path), sr=sr, mono=True)
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
-    # mfcc shape: (n_mfcc, T)
+    sr: int,
+    n_mfcc: int,
+    n_fft: int,
+    hop_length: int,
+):
+    y, _ = librosa.load(str(wav_path), sr=sr, mono=True)
+
+    mfcc = librosa.feature.mfcc(
+        y=y,
+        sr=sr,
+        n_mfcc=n_mfcc,
+        n_fft=n_fft,
+        hop_length=hop_length,
+    )
+
     mean = mfcc.mean(axis=1)
     std = mfcc.std(axis=1)
+
     feat = np.concatenate([mean, std], axis=0)
     return feat.astype(np.float32)
 
 
-def build_df(file_list: List[Path], **mfcc_kwargs) -> pd.DataFrame:
+def build_dataframe(file_list, **kwargs):
     rows = []
+
     for p in file_list:
-        feat = extract_mfcc_vector(p, **mfcc_kwargs)
+        feat = extract_mfcc_vector(p, **kwargs)
         row = {"path": str(p)}
-        # f0..f(2*n_mfcc-1)
         for i, v in enumerate(feat.tolist()):
             row[f"f{i}"] = v
         rows.append(row)
+
     return pd.DataFrame(rows)
 
 
+# =========================
+# Main
+# =========================
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data_root", default="data/raw", help="vd: data/raw")
-    ap.add_argument("--machine", default="fan", help="fan/valve/...")
-    ap.add_argument("--out_root", default="extract/features/mfcc", help="vd: extract/features/mfcc")
-    ap.add_argument("--sr", type=int, default=16000)
-    ap.add_argument("--n_mfcc", type=int, default=20)
-    ap.add_argument("--n_fft", type=int, default=1024)
-    ap.add_argument("--hop_length", type=int, default=512)
+    parser = argparse.ArgumentParser()
 
-    # chọn SNR
-    ap.add_argument("--train_snr", nargs="*", default=None, help='vd: 6db 0db (mặc định: "-6db 0db 6db")')
-    ap.add_argument("--test_snr", nargs="*", default=None, help='vd: -6db (mặc định: "-6db 0db 6db")')
+    # config support
+    parser.add_argument("--config", type=str, default=None)
 
-    ap.add_argument("--train_ratio", type=float, default=0.8)
-    ap.add_argument("--seed", type=int, default=42)
+    # basic
+    parser.add_argument("--data_root", default="data/raw")
+    parser.add_argument("--machine", default="fan")
+    parser.add_argument("--out_root", default="extract/features")
 
-    args = ap.parse_args()
+    # mfcc params
+    parser.add_argument("--sr", type=int, default=16000)
+    parser.add_argument("--n_mfcc", type=int, default=20)
+    parser.add_argument("--n_fft", type=int, default=1024)
+    parser.add_argument("--hop_length", type=int, default=512)
 
-    data_root = Path(args.data_root)
-    out_dir = Path(args.out_root) / args.machine
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # split
+    parser.add_argument("--train_snr", nargs="*", default=None)
+    parser.add_argument("--test_snr", nargs="*", default=None)
+    parser.add_argument("--train_ratio", type=float, default=0.8)
+    parser.add_argument("--seed", type=int, default=42)
 
-    train_snr = args.train_snr if args.train_snr is not None else DEFAULT_SNR_LIST
-    test_snr = args.test_snr if args.test_snr is not None else DEFAULT_SNR_LIST
+    args = parser.parse_args()
 
+    # =========================
+    # Load config nếu có
+    # =========================
+    if args.config:
+        with open(args.config, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+
+        # override top-level keys
+        for key, value in cfg.items():
+            setattr(args, key, value)
+
+        # nếu config có block mfcc riêng
+        if "mfcc" in cfg:
+            mfcc_cfg = cfg["mfcc"]
+            args.sr = mfcc_cfg.get("sr", args.sr)
+            args.n_mfcc = mfcc_cfg.get("n_mfcc", args.n_mfcc)
+            args.n_fft = mfcc_cfg.get("n_fft", args.n_fft)
+
+            # hỗ trợ hop_size hoặc hop_length
+            if "hop_size" in mfcc_cfg:
+                args.hop_length = mfcc_cfg["hop_size"]
+            elif "hop_length" in mfcc_cfg:
+                args.hop_length = mfcc_cfg["hop_length"]
+
+    # =========================
+    # SNR setup
+    # =========================
+    train_snr = args.train_snr if args.train_snr else DEFAULT_SNR_LIST
+    test_snr = args.test_snr if args.test_snr else DEFAULT_SNR_LIST
+
+    # =========================
+    # Make split
+    # =========================
     split = make_split(
-        data_root=data_root,
+        data_root=args.data_root,
         machine=args.machine,
         train_snr=train_snr,
         test_snr=test_snr,
@@ -78,25 +121,35 @@ def main():
         seed=args.seed,
     )
 
-    mfcc_kwargs = dict(sr=args.sr, n_mfcc=args.n_mfcc, n_fft=args.n_fft, hop_length=args.hop_length)
+    print(f"[INFO] Train normal: {len(split.train_normal)}")
+    print(f"[INFO] Test normal: {len(split.test_normal)}")
+    print(f"[INFO] Test abnormal: {len(split.test_abnormal)}")
 
-    print(f"[INFO] train_normal: {len(split.train_normal)} files")
-    print(f"[INFO] test_normal: {len(split.test_normal)} files")
-    print(f"[INFO] test_abnormal: {len(split.test_abnormal)} files")
-    print(f"[INFO] train_snr={train_snr} | test_snr={test_snr}")
+    # =========================
+    # Extract features
+    # =========================
+    mfcc_kwargs = dict(
+        sr=args.sr,
+        n_mfcc=args.n_mfcc,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+    )
 
-    df_train = build_df(split.train_normal, **mfcc_kwargs)
-    df_test_n = build_df(split.test_normal, **mfcc_kwargs)
-    df_test_a = build_df(split.test_abnormal, **mfcc_kwargs)
+    df_train = build_dataframe(split.train_normal, **mfcc_kwargs)
+    df_test_n = build_dataframe(split.test_normal, **mfcc_kwargs)
+    df_test_a = build_dataframe(split.test_abnormal, **mfcc_kwargs)
+
+    # =========================
+    # Save
+    # =========================
+    out_dir = Path(args.out_root) / "mfcc" / args.machine
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     df_train.to_csv(out_dir / "train_normal.csv", index=False)
     df_test_n.to_csv(out_dir / "test_normal.csv", index=False)
     df_test_a.to_csv(out_dir / "test_abnormal.csv", index=False)
 
-    print(f"✅ Saved:")
-    print(f" - {out_dir / 'train_normal.csv'}")
-    print(f" - {out_dir / 'test_normal.csv'}")
-    print(f" - {out_dir / 'test_abnormal.csv'}")
+    print(f"\n✅ Saved to: {out_dir}")
 
 
 if __name__ == "__main__":
