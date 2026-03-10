@@ -1,46 +1,54 @@
 ```
-Acoustic-Anomaly-Detection-for-Machines/
+Acoustic-Anomaly-Detection-for-Machines
 │
-├── data/
+├── data/                         # Dataset directory
 │   └── raw/
-│       ├── fan/
-│       └── valve/
+│       ├── fan/                  # Fan machine audio
+│       │   ├── -6db/
+│       │   ├── 0db/
+│       │   └── 6db/
+│       │       ├── normal/
+│       │       └── abnormal/
+│       │
+│       └── valve/                # Valve machine audio
 │
-├── extract/
-│   └── features/
-│       └── mfcc/
-│           └── fan/
-│               ├── train_normal.csv
-│               ├── test_normal.csv
-│               └── test_abnormal.csv
+├── extract/                      # Extracted intermediate data
 │
-├── logs/
-│   ├── mfcc.log
-│   ├── chroma.log
-│   └── data_check.log
+├── features/                     # Feature datasets after extraction
 │
-├── results/
-│   └── mfcc/
-│       └── fan/
-│           ├── train_normal/
-│           ├── test_normal/
-│           ├── test_abnormal/
-│           └── audio_summary.csv
+├── models/                       # Saved trained models
+│   ├── gmm/
+│   ├── isolation_forest/
+│   └── oneclass_svm/
 │
-├── src/
-│   ├── dsp/
-│   │   ├── __init__.py
-│   │   └── dsp_mfcc.py
+├── results/                      # Model prediction results
+│   ├── gmm/
+│   ├── isolation_forest/
+│   └── oneclass_svm/
+│
+├── src/                          # Source code
+│
+│   ├── dsp/                      # Digital signal processing modules
+│   │   ├── dsp_mfcc.py
+│   │   ├── dsp_logmel.py
+│   │   ├── dsp_stft.py
+│   │   └── handcraft.py
 │   │
-│   ├── audio_utils.py
-│   ├── check_data.py
-│   ├── extract_mfcc.py
-│   ├── extract_chroma.py
-│   ├── extract_stft.py
-│   ├── load_data.py
-│   └── rename_arrange.py
+│   ├── extract_mfcc.py           # MFCC feature extraction
+│   ├── extract_logmel.py         # Log-Mel feature extraction
+│   ├── extract_stft.py           # STFT feature extraction
+│   ├── extract_chroma.py         # Chroma feature extraction
+│   │
+│   ├── load_data.py              # Dataset loader
+│   ├── check_data.py             # Dataset checking utilities
+│   ├── audio_utils.py            # Audio processing utilities
+│   ├── config_utils.py           # Configuration helper functions
+│   │
+│   ├── m_gmm.py                  # Gaussian Mixture Model anomaly detection
+│   ├── m_iso.py                  # Isolation Forest anomaly detection
+│   └── m_svm.py                  # One-Class SVM anomaly detection
 │
-├── load_data.py
-├── .gitignore
-└── README.md
+├── config.json                   # Project configuration file
+├── README.md                     # Project documentation
+└── paper.pdf                     # Reference research paper
 ```

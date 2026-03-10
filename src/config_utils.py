@@ -1,15 +1,23 @@
 import json
-from typing import Any, Dict, Optional
+from pathlib import Path
 
-def load_json(path: Optional[str]) -> Dict[str, Any]:
-    if not path:
-        return {}
-    with open(path, "r", encoding="utf-8") as f:
+
+def load_config(config_path: str = "config.json") -> dict:
+    config_file = Path(config_path)
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_file, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def get_section(cfg: Dict[str, Any], key: str) -> Dict[str, Any]:
-    val = cfg.get(key, {})
-    return val if isinstance(val, dict) else {}
 
-def cfg_get(cfg: Dict[str, Any], key: str, default: Any) -> Any:
-    return cfg.get(key, default)
+def get_feature_config(cfg: dict, feature_name: str) -> dict:
+    if feature_name not in cfg:
+        raise KeyError(f"Missing '{feature_name}' section in config.json")
+    return cfg[feature_name]
+
+
+def ensure_dir(path):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+    return path

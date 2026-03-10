@@ -1,20 +1,17 @@
+from pathlib import Path
+import librosa
 import numpy as np
-import soundfile as sf
 
-def load_audio(file_path, sr_target=None):
-    y, sr = sf.read(file_path)
-    
-    if y.ndim == 2:
-        y = y.mean(axis=1)
 
-    if sr_target and sr != sr_target:
-        import scipy.signal
-        n = int(len(y) * sr_target / sr)
-        y = scipy.signal.resample(y, n)
-        sr = sr_target
-
-    max_val = np.max(np.abs(y))
-    if max_val > 0:
-        y = y / max_val
-
+def load_audio(file_path: str | Path, sr: int = 16000, mono: bool = True, duration: float | None = None):
+    y, sr = librosa.load(file_path, sr=sr, mono=mono, duration=duration)
     return y, sr
+
+
+def feature_to_1d(feature: np.ndarray) -> np.ndarray:
+    """
+    Convert 2D feature (freq x time) -> 1D vector by averaging across time axis.
+    """
+    if feature.ndim == 2:
+        return np.mean(feature, axis=1)
+    return feature
