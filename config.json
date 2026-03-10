@@ -2,14 +2,28 @@
   "dataset": {
     "raw_data_dir": "data/raw",
     "feature_dir": "features",
-    "machines": ["fan", "valve"],
-    "snr_levels": ["-6db", "0db", "6db"],
-    "splits": ["normal", "abnormal"]
+    "machines": [
+      "fan",
+      "valve"
+    ],
+    "snr_levels": [
+      "-6db",
+      "0db",
+      "6db"
+    ],
+    "splits": [
+      "normal",
+      "abnormal"
+    ]
   },
   "audio": {
     "sr": 16000,
     "mono": true,
     "duration": null
+  },
+  "model": {
+    "model_dir": "models",
+    "result_dir": "results"
   },
   "mfcc": {
     "n_mfcc": 20,
@@ -32,5 +46,25 @@
     "n_chroma": 12,
     "n_fft": 1024,
     "hop_length": 512
+  },
+  "gmm": {
+    "n_components": 2,
+    "covariance_type": "full",
+    "max_iter": 200,
+    "random_state": 42,
+    "threshold_percentile": 5.0
+  },
+  "isolation_forest": {
+    "n_estimators": 100,
+    "contamination": "auto",
+    "max_samples": "auto",
+    "random_state": 42,
+    "threshold_percentile": 5.0
+  },
+  "oneclass_svm": {
+    "kernel": "rbf",
+    "gamma": "scale",
+    "nu": 0.05,
+    "threshold_percentile": 5.0
   }
 }
